@@ -1,187 +1,154 @@
 import axios from 'axios';
-import dataStorage from '../utils/DataStorage'
 
 axios.defaults.baseURL = 'https://api.mangadex.org';
 
+interface MangaData {
+    id: string;
+    title: string;
+    description: string;
+    year: number;
+    status: string;
+    lastVolume: number;
+    lastChapter: number;
+    cover: string;
+}
+
 class MangaApi {
 
-    public async getManga(id: string) {
-        const response = await axios.get(`/manga/${id}`,
-            {
-                params: {
-                    includes: ['cover_art']
-                }
-            }
-        );
-
-        const manga = response.data.data;
-
-        const fileName = manga.relationships[2]?.attributes?.fileName || '';
-
-        const data = {
-            id: response.data.data.id,
-            title: response.data.data.attributes.title.en,
-            description: response.data.data.attributes.description.pt ? response.data.data.attributes.description.pt : response.data.data.attributes.description.en,
-            year: response.data.data.attributes.year,
-            status: response.data.data.attributes.status,
-            lastVolume: response.data.data.attributes.lastVolume,
-            lastChapter: response.data.data.attributes.lastChapter,
-            cover: fileName ? `https://uploads.mangadex.org/covers/${response.data.data.id}/${fileName}` : 'https://th.bing.com/th/id/OIG2.38ZS2m8wm3EbF7odr3Xh?pid=ImgGn'
-        }
-
-        return data;
+    private getCoverFileName(relationships: any[]): string {
+        const rel = relationships?.find(r => r.type === 'cover_art');
+        return rel?.attributes?.fileName ?? '';
     }
 
-    public async getMangaList(limit: number = 20, title: string = '', includedTags: string[] = [], favoritoTag: boolean = false, favoritos: string[] = []) {
+    private parseManga(manga: any): MangaData {
+        const fileName = this.getCoverFileName(manga.relationships);
+        return {
+            id: manga.id,
+            title: manga.attributes.title.en ?? Object.values(manga.attributes.title)[0] ?? '',
+            description: manga.attributes.description?.pt ?? manga.attributes.description?.en ?? '',
+            year: manga.attributes.year,
+            status: manga.attributes.status,
+            lastVolume: manga.attributes.lastVolume,
+            lastChapter: manga.attributes.lastChapter,
+            cover: fileName
+                ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}`
+                : '',
+        };
+    }
 
+    public async getPopularManga(limit: number = 20): Promise<MangaData[]> {
         const response = await axios.get('/manga', {
             params: {
-                limit: limit,
-                title: title,
+                limit,
                 availableTranslatedLanguage: ['pt-br'],
-                includedTags: includedTags,
-                excludedTags: [],
                 includes: ['cover_art'],
-            }
+                'order[followedCount]': 'desc',
+            },
         });
-
-        const resApi = response.data.data;
-
-        const mangaList = [];
-
-        for (const manga of resApi) {
-            try {
-                const fileName = manga.relationships[2]?.attributes?.fileName || '';
-                const data = {
-                    id: manga.id,
-                    title: manga.attributes.title.en,
-                    description: manga.attributes.description.pt ? manga.attributes.description.pt : manga.attributes.description.en,
-                    year: manga.attributes.year,
-                    status: manga.attributes.status,
-                    lastVolume: manga.attributes.lastVolume,
-                    lastChapter: manga.attributes.lastChapter,
-                    cover: fileName ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}` : 'https://th.bing.com/th/id/OIG2.38ZS2m8wm3EbF7odr3Xh?pid=ImgGn'
-                };
-
-                mangaList.push(data);
-            } catch (error) {
-                console.error('Error processing manga:', error);
-            }
-        }
-
-        return mangaList;      
+        return response.data.data.map((m: any) => this.parseManga(m));
     }
 
-    public async getLikedMangas(mangas: string[]) {
-
-        const data: any[] = [];
-    
-        for (const likedManga of mangas) {
-            const response = await axios.get(`/manga/${likedManga}`,
-                {
-                    params: {
-                        includes: ['cover_art']
-                    }
-                }
-            );
-            const manga = response.data.data;
-    
-            const fileName = manga.relationships[2]?.attributes?.fileName || '';
-    
-            const mangaData = {
-                id: manga.id,
-                title: manga.attributes.title.en,
-                description: manga.attributes.description.pt ? manga.attributes.description.pt : manga.attributes.description.en,
-                year: manga.attributes.year,
-                status: manga.attributes.status,
-                lastVolume: manga.attributes.lastVolume,
-                lastChapter: manga.attributes.lastChapter,
-                cover: fileName ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}` : 'https://th.bing.com/th/id/OIG2.38ZS2m8wm3EbF7odr3Xh?pid=ImgGn'
-            };
-    
-            data.push(mangaData);
-        }
-    
-        return data;
+    public async getManga(id: string): Promise<MangaData> {
+        const response = await axios.get(`/manga/${id}`, {
+            params: { includes: ['cover_art'] },
+        });
+        return this.parseManga(response.data.data);
     }
 
-    public async getMangaChapters(id: string = 'ab8cbb82-d0ed-45a7-8ffe-4bfa6d43d79c') {
+    public async getMangaList(
+        limit: number = 20,
+        title: string = '',
+        includedTags: string[] = [],
+    ): Promise<MangaData[]> {
+        const response = await axios.get('/manga', {
+            params: {
+                limit,
+                title: title || undefined,
+                availableTranslatedLanguage: ['pt-br'],
+                includedTags: includedTags.length ? includedTags : undefined,
+                includes: ['cover_art'],
+                'order[followedCount]': 'desc',
+            },
+        });
+        return response.data.data.map((m: any) => this.parseManga(m));
+    }
+
+    // Usa o endpoint batch em vez de N chamadas sequenciais
+    public async getLikedMangas(ids: string[]): Promise<MangaData[]> {
+        if (ids.length === 0) return [];
+        const response = await axios.get('/manga', {
+            params: {
+                ids,
+                includes: ['cover_art'],
+                limit: ids.length,
+                contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'],
+            },
+        });
+        return response.data.data.map((m: any) => this.parseManga(m));
+    }
+
+    public async getMangaChapters(mangaId: string): Promise<{ id: string; chapter: string; externalUrl?: string | null }[]> {
         try {
-            const response = await axios.get(`/manga/${id}/aggregate`, {
-                params: {
-                    translatedLanguage: ['pt-br']
-                }
-            });
+            const all: any[] = [];
+            let offset = 0;
+            const limit = 100;
 
-            // Extrair os capítulos da resposta
-            const chapters: any[] = this.extractChapters(response.data);
-
-            return chapters;
-        } catch (error) {
-            console.error('Erro ao obter os dados do servidor:', error);
-        }
-    }
-
-    private extractChapters(apiResponse: any): any[] {
-        const chapters: any[] = [];
-
-        for (const volumeKey in apiResponse.volumes) {
-            const volume = apiResponse.volumes[volumeKey];
-            for (const chapterKey in volume.chapters) {
-                chapters.push(volume.chapters[chapterKey]);
+            while (true) {
+                const response = await axios.get('/chapter', {
+                    params: {
+                        manga: mangaId,
+                        translatedLanguage: ['pt-br'],
+                        limit,
+                        offset,
+                        contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'],
+                        'order[chapter]': 'asc',
+                    },
+                });
+                all.push(...response.data.data);
+                if (all.length >= response.data.total) break;
+                offset += limit;
             }
-        }
 
-        return chapters;
+            // Deduplica por número de capítulo, preferindo capítulos sem URL externa
+            const seen = new Map<string, any>();
+            for (const ch of all) {
+                const num: string = ch.attributes.chapter ?? 'Oneshot';
+                const existing = seen.get(num);
+                if (!existing || (existing.attributes.externalUrl && !ch.attributes.externalUrl)) {
+                    seen.set(num, ch);
+                }
+            }
+
+            return Array.from(seen.values())
+                .sort((a, b) => parseFloat(a.attributes.chapter ?? '0') - parseFloat(b.attributes.chapter ?? '0'))
+                .map((ch) => ({
+                    id: ch.id,
+                    chapter: ch.attributes.chapter ?? 'Oneshot',
+                    externalUrl: ch.attributes.externalUrl ?? null,
+                }));
+        } catch (error) {
+            console.error('Erro ao obter capítulos:', error);
+            return [];
+        }
     }
 
     public async getChapterData(id: string) {
         const response = await axios.get(`/at-home/server/${id}`);
-
-        const hash = response.data.chapter.hash
-        const pages = [];
-
-        response.data.chapter.data.forEach(page => {
-            pages.push(`https://uploads.mangadex.org/data/${hash}/${page}`)
-        })
-
-        const data = {
-            hash: hash,
-            pages: pages
-        }
-        
-        return data;
+        const { baseUrl } = response.data;
+        const { hash, data: pages } = response.data.chapter;
+        return {
+            hash,
+            pages: pages.map((p: string) => `${baseUrl}/data/${hash}/${p}`),
+        };
     }
 
-    public async getChapterPages(hash: string, page: string[]) {
-
-        try {
-            const response = await axios.get(`https://uploads.mangadex.org/data/${hash}/${page}`);
-    
-            return response
-        } catch (error) {
-            console.log(error)
-        }
-    }
-
-    public async getTags (limit: number = 5) {
+    public async getTags(): Promise<{ id: string; name: string }[]> {
         const response = await axios.get('/manga/tag');
-        const data = response.data.data;
-
-        const tags = [];
-
-        data.map(tag => {
-            const actualTag = {
-                id: tag.id,
-                name: tag.attributes.name.en
-            }
-            tags.push(actualTag)
-        })
-
-        return tags
+        return response.data.data.map((tag: any) => ({
+            id: tag.id,
+            name: tag.attributes.name.en,
+        }));
     }
-    
 }
 
 export const mangaApi = new MangaApi();
-/* mangaApi.getMangaChapters(); */

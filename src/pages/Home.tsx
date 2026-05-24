@@ -1,323 +1,377 @@
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  LogBox,
+} from "react-native";
+import { Text, Searchbar, Chip, ActivityIndicator } from "react-native-paper";
+import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+import { mangaApi } from "../utils/mangaDex";
+import dataStorage from "../utils/DataStorage";
 
-import { 
-    View, 
-    Text, 
-    TextInput, 
-    Image, 
-    ScrollView, 
-    TouchableOpacity, 
-    StyleSheet, 
-    Platform, 
-    LogBox, 
-    ActivityIndicator,
-    RefreshControl,
-    Button
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import { mangaApi } from '../utils/mangaDex';
-import { useEffect, useState, useCallback, useContext } from 'react';
-import dataStorage from '../utils/DataStorage';
-import axios from 'axios';
-import { FlatList } from 'react-native-gesture-handler';
-
-interface mangaList {
-    id: string
-    title: string
-    description: string
-    year: number
-    status: string
-    lastVolume: number
-    lastChapter: number
-    cover: string
-}
+const BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
 export const Home = ({ navigation }: { navigation: any }) => {
+  const insets = useSafeAreaInsets();
 
-    const [mangaList, setMangaList] = useState([]);
+  const [mangaList, setMangaList] = useState<any[]>([]);
+  const [tags, setTags] = useState<any[]>([]);
+  const [activeTag, setActiveTag] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sectionLabel, setSectionLabel] = useState("Populares");
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
 
-    const [refreshing, setRefreshing] = useState(false);
+  const loadPopular = () => {
+    setIsLoading(true);
+    mangaApi.getPopularManga(20).then((list) => {
+      setMangaList(list);
+      setIsLoading(false);
+      setRefreshing(false);
+    });
+  };
 
-    const [favoritesMangas, setFavoritesMangas] = useState([]);
+  const loadList = (tag = "", title = "") => {
+    setIsLoading(true);
+    mangaApi.getMangaList(20, title, tag ? [tag] : []).then((list) => {
+      setMangaList(list);
+      setIsLoading(false);
+      setRefreshing(false);
+    });
+  };
 
-    const [tags, setTags] = useState([]);
+  useEffect(() => {
+    loadPopular();
+    mangaApi.getTags().then(setTags);
+    LogBox.ignoreLogs(["VirtualizedLists should never be nested"]);
+  }, []);
 
-    const [activeTag, setActiveTag] = useState('');
-
-    const [isLoading, setIsLoading] = useState(true);
-
-    const goToManga = (id: string) => {
-        navigation.navigate('Manga', { mangaId: id })
-    }
-
-    const goToFavoriteManga = () => {
-        navigation.navigate('Favoritos')
-    }
-
-    const filterManga = (title: string) => {
-        setActiveTag('');
-        mangaApi.getMangaList(5, title).then(mangaList => {
-            setMangaList(mangaList);
-        })
-    }
-
-    const filterTags = (tag: string) => {
-        setIsLoading(true);
-        setActiveTag(tag);
-        if (activeTag === tag) {
-            setActiveTag('');
-            mangaApi.getMangaList().then(mangaList => {
-                setMangaList(mangaList);
-                setIsLoading(false);
-            })
-            return;
-        }
-        mangaApi.getMangaList(10, '', [tag]).then(mangaList => {
-            setMangaList(mangaList);
-            setIsLoading(false);
-        })
-    }
-
-    const atualizarFavoritos = () => {
-        dataStorage.getLikedMangas().then(likedMangas => {
-
-            setFavoritesMangas(likedMangas)
-
-            mangaApi.getLikedMangas(likedMangas).then(mangas => {
-                setFavoritesMangas(mangas)
-            })
-        });
-    }
-
-    const getMangaListAndTags = () => {
-        setIsLoading(true);
-        mangaApi.getMangaList().then(mangaList => {
-            setMangaList(mangaList);
-            setIsLoading(false);
-            setRefreshing(false);
-        })
-
-        mangaApi.getTags().then(tags => {
-            setTags(tags);
-        })
-    }
-
-    useEffect(() => {
-
-        getMangaListAndTags();
-
-        dataStorage.getLikedMangas().then(likedMangas => {
-
-            setFavoritesMangas(likedMangas)
-
-            mangaApi.getLikedMangas(likedMangas).then(mangas => {
-                setFavoritesMangas(mangas)
-            })
-        });
-
-        LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
-
+  useFocusEffect(
+    useCallback(() => {
+      dataStorage.getLikedMangas().then((ids) => setLikedIds(new Set(ids)));
     }, [])
+  );
 
-    const onRefresh = useCallback(() => {
-        setRefreshing(true);
-        setActiveTag('');
-        getMangaListAndTags();
-        atualizarFavoritos();
-      }, []);
-
-    function truncateText(text = '') {
-        if (text.length <= 42) {
-          return text;
-        }
-        return text.substring(0, 15 - 3) + '...';
-      }
-
-    return (
-        <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} style={Styles.container}>
-            <StatusBar backgroundColor="#EB5757" style="light" />
-            
-            <View style={Styles.header}>
-               
-                <View style={Styles.welcome}>
-                    <View>
-                        <Text style={Styles.welcomeText}>Welcome to MangaRabbit</Text>
-                        <Text style={Styles.welcomeSubText}>Explore the world of manga</Text>
-                    </View>
-                </View>
-
-                <View style={Styles.inputContainer}>
-                    <Ionicons name="search" size={24} color="#8E8E93" />
-                    <TextInput onChangeText={filterManga} placeholder="Search here" style={Styles.input} />
-                    <TouchableOpacity activeOpacity={1} onPress={goToFavoriteManga}>
-                        <Ionicons name="heart" size={24} color="#EB5757" />
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={Styles.tagsContainer}>
-                    <TouchableOpacity activeOpacity={1} style={activeTag === '' ? Styles.tagActive : Styles.tag} onPress={() => filterManga('')}>
-                        <Text style={Styles.tagText}>All</Text>
-                    </TouchableOpacity>
-                    {tags.map((tag, index) => (
-                        <TouchableOpacity activeOpacity={1} style={activeTag === tag.id ? Styles.tagActive : Styles.tag} key={index} onPress={() => filterTags(tag.id)}>
-                            <Text style={Styles.tagText}>{tag.name}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-
-                
-            </View>
-            
-            {!isLoading && activeTag === '' ? <Text style={Styles.title}>Popular mangas</Text> : null}
-            <View style={Styles.body}>
-                <View style={{flex: 1, width: '100%'}}>
-                    {isLoading ? <ActivityIndicator size="large" color="#EB5757" />: null}
-                </View>
-                {!isLoading ?
-                    mangaList.map((manga, index) => (
-                        <View style={Styles.cardContainer} key={index}>
-                            <TouchableOpacity activeOpacity={1} style={Styles.card} onPress={() => goToManga(manga.id)}>
-                                <Image style={Styles.cardImage} source={{ uri: manga.cover }} />
-                                <Text style={Styles.cardTitle}>{truncateText(manga.title)}</Text>
-                                {manga.year ? <Text style={Styles.cardYear}>{manga.year}</Text> : null}
-                            </TouchableOpacity>
-                        </View>
-                    ))
-                : null}
-            </View>
-
-        </ScrollView>
-    )
-}
-
-const Styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        
-    },
-    header: {
-        paddingTop: Platform.OS === 'android' ? 45 : 0,
-    },
-    welcome: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-    },
-    welcomeText: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#EB5757'
-    },
-    welcomeSubText: {
-        fontSize: 18,
-        marginTop: 5,
-        marginBottom: 20,
-        fontWeight: '300',
-        color: '#000'
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        borderColor: '#8E8E93',
-        borderWidth: 1,
-        borderRadius: 10,
-        alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 15,
-        marginHorizontal: 15,
-    },
-    input: {
-        flex: 1,
-        marginLeft: 10
-    },
-    tagsContainer: {
-        marginVertical: 20,
-        paddingHorizontal: 15
-    },
-    tag: {
-        marginRight: 10,
-        backgroundColor: '#EB5757',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 10
-    },
-    tagActive: {
-        marginRight: 10,
-        backgroundColor: 'black',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 10
-    },
-    tagText: {
-        color: '#fff'
-    },
-    favoritesContainer: {
-
-    },
-    title: {
-        fontSize: 18,
-        paddingHorizontal: 20,
-        fontWeight: '300',
-        color: '#000'
-    },
-    favoritesList: {
-        
-    },
-    favorites: {
-        marginRight: 10,
-        paddingHorizontal: 10,
-        width: 150,
-    },
-    lastItemMargin: {
-        marginRight: 10, // Ou a margem que você deseja aplicar ao último item
-    },
-    favoritesImage: {
-        width: 150,
-        height: 250,
-        borderRadius: 15
-    },
-    favoritesTitle: {
-        marginTop: 5,
-        fontSize: 14,
-        textAlign: 'center',
-        fontWeight: 'bold'
-    },
-    favoritesYear: {
-        marginTop: 5,
-        fontSize: 12,
-        color: '#666',
-        textAlign: 'center',
-    },
-    body: {
-        height: '100%',
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    cardContainer: {
-        width: '50%',
-        padding: 10,
-        alignItems: 'center',
-    },
-    card: {
-        padding: 10,
-        borderRadius: 15,
-        alignItems: 'center',
-    },
-    cardImage: {
-        width: 150,
-        height: 250,
-        borderRadius: 15
-    },
-    cardTitle: {
-        marginTop: 5,
-        fontSize: 14,
-        textAlign: 'center',
-        fontWeight: 'bold'
-    },
-    cardYear: {
-        marginTop: 5,
-        fontSize: 12,
-        color: '#666',
-        textAlign: 'center',
+  const toggleLike = useCallback(async (mangaId: string) => {
+    const isLiked = likedIds.has(mangaId);
+    if (isLiked) {
+      await dataStorage.UnLikeManga(mangaId);
+      setLikedIds((prev) => { const next = new Set(prev); next.delete(mangaId); return next; });
+    } else {
+      await dataStorage.LikeManga(mangaId);
+      setLikedIds((prev) => new Set(prev).add(mangaId));
     }
-})
+  }, [likedIds]);
+
+  const onSearch = (text: string) => {
+    setSearchQuery(text);
+    setActiveTag("");
+    if (text === "") {
+      setSectionLabel("Populares");
+      loadPopular();
+    } else {
+      setSectionLabel(`Resultados para "${text}"`);
+      loadList("", text);
+    }
+  };
+
+  const onTagPress = (tagId: string, tagName: string) => {
+    if (activeTag === tagId) {
+      setActiveTag("");
+      setSectionLabel("Populares");
+      loadPopular();
+      return;
+    }
+    setActiveTag(tagId);
+    setSectionLabel(tagName);
+    loadList(tagId);
+  };
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setActiveTag("");
+    setSearchQuery("");
+    setSectionLabel("Populares");
+    loadPopular();
+    mangaApi.getTags().then(setTags);
+  }, []);
+
+  return (
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+        <View style={styles.titleRow}>
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => navigation.openDrawer()}
+            hitSlop={12}
+          >
+            <Ionicons name="menu" size={22} color="#aaa" />
+          </TouchableOpacity>
+
+          <View style={styles.titleCenter}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="book" size={14} color="#EB5757" />
+            </View>
+            <Text style={styles.appName}>MangaRabbit</Text>
+          </View>
+
+          <View style={styles.menuPlaceholder} />
+        </View>
+
+        <Searchbar
+          placeholder="Buscar manga..."
+          placeholderTextColor="#444"
+          onChangeText={onSearch}
+          value={searchQuery}
+          style={styles.searchbar}
+          inputStyle={styles.searchInput}
+          iconColor="#555"
+          theme={{ colors: { onSurface: "#fff" } }}
+        />
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
+          <Chip
+            selected={activeTag === ""}
+            onPress={() => { setActiveTag(""); setSectionLabel("Populares"); loadPopular(); }}
+            style={[styles.chip, activeTag === "" && styles.chipActive]}
+            textStyle={[styles.chipText, activeTag === "" && styles.chipTextActive]}
+            showSelectedCheck={false}
+          >
+            Tudo
+          </Chip>
+          {tags.map((tag) => (
+            <Chip
+              key={tag.id}
+              selected={activeTag === tag.id}
+              onPress={() => onTagPress(tag.id, tag.name)}
+              style={[styles.chip, activeTag === tag.id && styles.chipActive]}
+              textStyle={[styles.chipText, activeTag === tag.id && styles.chipTextActive]}
+              showSelectedCheck={false}
+            >
+              {tag.name}
+            </Chip>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Lista */}
+      <ScrollView
+        style={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#EB5757" />
+        }
+      >
+        {/* Label da seção */}
+        <View style={styles.sectionRow}>
+          <View style={styles.sectionAccent} />
+          <Text style={styles.sectionLabel}>{sectionLabel}</Text>
+        </View>
+
+        {isLoading && !refreshing ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="large" color="#EB5757" />
+          </View>
+        ) : (
+          <View style={styles.grid}>
+            {mangaList.map((manga) => (
+              <TouchableOpacity
+                key={manga.id}
+                style={styles.card}
+                onPress={() => navigation.getParent()?.navigate("Manga", { mangaId: manga.id })}
+                activeOpacity={0.75}
+              >
+                <View style={styles.coverWrap}>
+                  <Image
+                    source={{ uri: manga.cover }}
+                    style={styles.cover}
+                    contentFit="cover"
+                    placeholder={BLURHASH}
+                    transition={250}
+                  />
+                  <TouchableOpacity
+                    style={styles.heartBtn}
+                    onPress={() => toggleLike(manga.id)}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={likedIds.has(manga.id) ? "heart" : "heart-outline"}
+                      size={18}
+                      color={likedIds.has(manga.id) ? "#EB5757" : "#fff"}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text numberOfLines={2} style={styles.cardTitle}>{manga.title}</Text>
+                  {manga.year ? <Text style={styles.cardYear}>{manga.year}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0F0F0F" },
+
+  // ── Header ──────────────────────────────────────────────
+  header: {
+    backgroundColor: "#1C1C1E",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2C2C2E",
+    // sombra para separar do conteúdo
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  menuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuPlaceholder: {
+    width: 36,
+    height: 36,
+  },
+  titleCenter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  logoCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  appName: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: -0.3,
+  },
+
+  searchbar: {
+    backgroundColor: "#2C2C2E",
+    borderRadius: 12,
+    height: 44,
+    elevation: 0,
+    marginBottom: 12,
+  },
+  searchInput: {
+    color: "#fff",
+    fontSize: 14,
+    alignSelf: "center",
+  },
+
+  chips: { gap: 8, alignItems: "center" },
+  chip: {
+    backgroundColor: "#2C2C2E",
+    borderRadius: 20,
+    borderWidth: 0,
+    height: 30,
+  },
+  chipActive: { backgroundColor: "#EB5757" },
+  chipText: { color: "#666", fontSize: 12, lineHeight: 14 },
+  chipTextActive: { color: "#fff", fontWeight: "700" },
+
+  // ── Conteúdo ─────────────────────────────────────────────
+  scroll: { flex: 1 },
+
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  sectionAccent: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: "#EB5757",
+  },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ddd",
+  },
+
+  loaderWrap: { paddingTop: 80, alignItems: "center" },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 8,
+    paddingBottom: 32,
+  },
+  card: { width: "50%", padding: 6 },
+  coverWrap: { position: "relative" },
+  cover: {
+    width: "100%",
+    aspectRatio: 2 / 3,
+    borderRadius: 10,
+    backgroundColor: "#1C1C1E",
+  },
+  heartBtn: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardInfo: {
+    backgroundColor: "#1C1C1E",
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    padding: 8,
+    marginTop: -6,
+    height: 62,
+    overflow: "hidden",
+  },
+  cardTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#E0E0E0",
+    lineHeight: 16,
+  },
+  cardYear: {
+    marginTop: 3,
+    fontSize: 11,
+    color: "#555",
+  },
+});

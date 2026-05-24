@@ -1,94 +1,153 @@
+import { View, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
+import { Text, ActivityIndicator } from "react-native-paper";
+import { Image } from "expo-image";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { mangaApi } from "../utils/mangaDex";
+import dataStorage from "../utils/DataStorage";
 
-import { View, Text, StyleSheet, Platform, TouchableOpacity, FlatList, Image, ScrollView } from 'react-native'
-import { useEffect, useState } from 'react'
-import { mangaApi } from '../utils/mangaDex'
-import dataStorage from '../utils/DataStorage'
+const BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
-export const LikedMangas = ({ navigation }) => {
+export const LikedMangas = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
+  const [mangas, setMangas] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-    const [likedMangas, setLikedMangas] = useState([])
-
-    const goToManga = (id: string) => {
-        navigation.navigate('Manga', { mangaId: id })
-    }
-
-    useEffect(() => {
-        dataStorage.getLikedMangas().then(likedMangas => {
-
-            setLikedMangas(likedMangas)
-
-            mangaApi.getLikedMangas(likedMangas).then(mangas => {
-                setLikedMangas(mangas)
-                console.log(mangas)
-            })
-        });
-
-    }, [])
-
-    function truncateText(text = '') {
-        if (text.length <= 42) {
-            return text;
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      dataStorage.getLikedMangas().then(async (ids) => {
+        const validIds = ids.filter((id) => id && id.trim().length > 0);
+        if (validIds.length === 0) {
+          setMangas([]);
+          setIsLoading(false);
+          return;
         }
-        return text.substring(0, 30 - 3) + '...';
-    }
+        try {
+          const list = await mangaApi.getLikedMangas(validIds);
+          setMangas(list);
+        } catch (err) {
+          console.error('[Favoritos] Erro na API:', err);
+          setMangas([]);
+        } finally {
+          setIsLoading(false);
+        }
+      });
+    }, [])
+  );
 
+  const header = (
+    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <Ionicons name="chevron-back" size={22} color="#fff" />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Favoritos</Text>
+      <View style={styles.backBtn} />
+    </View>
+  );
+
+  if (isLoading) {
     return (
-        <ScrollView>
-        <View style={Styles.container}>
-            <View style={Styles.body}>
-                {
-                    likedMangas.map((manga, index) => (
-                        <View style={Styles.cardContainer} key={index}>
-                            <TouchableOpacity activeOpacity={1} style={Styles.card} onPress={() => goToManga(manga.id)}>
-                                <Image style={Styles.cardImage} source={{ uri: manga.cover }} />
-                                <Text style={Styles.cardTitle}>{truncateText(manga.title)}</Text>
-                                {manga.year ? <Text style={Styles.cardYear}>{manga.year}</Text> : null}
-                            </TouchableOpacity>
-                        </View>
-                    ))
-                }
-            </View>
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#EB5757" />
         </View>
-        </ScrollView>
-    )
-}
+      </View>
+    );
+  }
 
-const Styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        paddingTop: Platform.OS === 'android' ? 0 : 0,
-        paddingBottom: 60
-    },
-    body: {
-        height: '100%',
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    cardContainer: {
-        width: '50%',
-        padding: 10,
-        alignItems: 'center',
-    },
-    card: {
-        padding: 10,
-        borderRadius: 15,
-        alignItems: 'center',
-    },
-    cardImage: {
-        width: 150,
-        height: 250,
-        borderRadius: 15
-    },
-    cardTitle: {
-        marginTop: 5,
-        fontSize: 14,
-        textAlign: 'center',
-        fontWeight: 'bold'
-    },
-    cardYear: {
-        marginTop: 5,
-        fontSize: 12,
-        color: '#666',
-        textAlign: 'center',
-    }
-})
+  if (mangas.length === 0) {
+    return (
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centered}>
+          <Ionicons name="heart-dislike-outline" size={56} color="#333" />
+          <Text style={styles.emptyTitle}>Nenhum favorito</Text>
+          <Text style={styles.emptySubtitle}>
+            Toque no coração em qualquer manga para salvar aqui
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      {header}
+      <ScrollView contentContainerStyle={styles.grid}>
+        {mangas.map((manga) => (
+          <TouchableOpacity
+            key={manga.id}
+            style={styles.card}
+            onPress={() => navigation.navigate("Manga", { mangaId: manga.id })}
+            activeOpacity={0.8}
+          >
+            <Image
+              source={{ uri: manga.cover }}
+              style={styles.cover}
+              contentFit="cover"
+              placeholder={BLURHASH}
+              transition={250}
+            />
+            <View style={styles.cardInfo}>
+              <Text numberOfLines={2} style={styles.cardTitle}>{manga.title}</Text>
+              {manga.year ? <Text style={styles.cardYear}>{manga.year}</Text> : null}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0F0F0F" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+    backgroundColor: "#0F0F0F",
+  },
+  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 17, fontWeight: "700", color: "#fff" },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+  },
+  emptyTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#444",
+  },
+  emptySubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#333",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: 8,
+    paddingBottom: 40,
+  },
+  card: { width: "50%", padding: 6 },
+  cover: {
+    width: "100%",
+    aspectRatio: 2 / 3,
+    borderRadius: 10,
+    backgroundColor: "#1C1C1E",
+  },
+  cardInfo: { paddingTop: 6, paddingHorizontal: 2 },
+  cardTitle: { fontSize: 12, fontWeight: "600", color: "#E5E5E5", lineHeight: 16 },
+  cardYear: { marginTop: 2, fontSize: 11, color: "#555" },
+});

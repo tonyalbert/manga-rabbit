@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -27,16 +22,14 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router"
-    ],
     "extra": {
-      "router": {
-        "origin": false
-      },
       "eas": {
         "projectId": "1939b080-776f-4e0a-a560-06b3e31901a6"
       }
-    }
+    },
+    "plugins": [
+      "expo-image",
+      "expo-sharing"
+    ]
   }
 }

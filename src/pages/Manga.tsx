@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { mangaApi } from "../utils/mangaDex";
 import dataStorage from "../utils/DataStorage";
+import { useLanguage } from "../context/LanguageContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const COVER_HEIGHT = Math.round(SCREEN_W * 1.1);
@@ -37,6 +38,7 @@ const STATUS_LABEL: Record<string, string> = {
 export const MangaPage = ({ route, navigation }: any) => {
   const { mangaId } = route.params;
   const insets = useSafeAreaInsets();
+  const { language } = useLanguage();
 
   const [manga, setManga] = useState<Manga>({
     id: "", title: "", description: "",
@@ -78,7 +80,7 @@ export const MangaPage = ({ route, navigation }: any) => {
 
   useEffect(() => {
     mangaApi.getManga(mangaId).then(setManga);
-    mangaApi.getMangaChapters(mangaId).then((ch) => {
+    mangaApi.getMangaChapters(mangaId, language).then((ch) => {
       setChapters(ch ?? []);
       setIsLoading(false);
     });

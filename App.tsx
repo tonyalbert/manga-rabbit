@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { PaperProvider, MD3DarkTheme } from "react-native-paper";
 import { Router } from "./src/router/Router";
+import { LanguageProvider } from "./src/context/LanguageContext";
 
 const theme = {
   ...MD3DarkTheme,
@@ -22,10 +23,12 @@ const theme = {
 export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <PaperProvider theme={theme}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
-        <Router />
-      </PaperProvider>
+      <LanguageProvider>
+        <PaperProvider theme={theme}>
+          <StatusBar style="light" translucent backgroundColor="transparent" />
+          <Router />
+        </PaperProvider>
+      </LanguageProvider>
     </GestureHandlerRootView>
   );
 }

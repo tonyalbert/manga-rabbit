@@ -5,6 +5,9 @@ import {
   StyleSheet,
   RefreshControl,
   LogBox,
+  Modal,
+  FlatList,
+  Pressable,
 } from "react-native";
 import { Text, Searchbar, Chip, ActivityIndicator } from "react-native-paper";
 import { Image } from "expo-image";
@@ -14,11 +17,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { mangaApi } from "../utils/mangaDex";
 import dataStorage from "../utils/DataStorage";
+import { useLanguage, LANGUAGES } from "../context/LanguageContext";
 
 const BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4";
 
 export const Home = ({ navigation }: { navigation: any }) => {
   const insets = useSafeAreaInsets();
+  const { language, setLanguage } = useLanguage();
 
   const [mangaList, setMangaList] = useState<any[]>([]);
   const [tags, setTags] = useState<any[]>([]);
@@ -28,23 +33,33 @@ export const Home = ({ navigation }: { navigation: any }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [sectionLabel, setSectionLabel] = useState("Populares");
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [langModalVisible, setLangModalVisible] = useState(false);
 
-  const loadPopular = () => {
+  const loadPopular = (lang = language) => {
     setIsLoading(true);
-    mangaApi.getPopularManga(20).then((list) => {
+    mangaApi.getPopularManga(20, lang).then((list) => {
       setMangaList(list);
       setIsLoading(false);
       setRefreshing(false);
     });
   };
 
-  const loadList = (tag = "", title = "") => {
+  const loadList = (tag = "", title = "", lang = language) => {
     setIsLoading(true);
-    mangaApi.getMangaList(20, title, tag ? [tag] : []).then((list) => {
+    mangaApi.getMangaList(20, title, tag ? [tag] : [], lang).then((list) => {
       setMangaList(list);
       setIsLoading(false);
       setRefreshing(false);
     });
+  };
+
+  const onSelectLanguage = async (code: string) => {
+    await setLanguage(code);
+    setLangModalVisible(false);
+    setActiveTag("");
+    setSearchQuery("");
+    setSectionLabel("Populares");
+    loadPopular(code);
   };
 
   useEffect(() => {
@@ -101,7 +116,7 @@ export const Home = ({ navigation }: { navigation: any }) => {
     setSectionLabel("Populares");
     loadPopular();
     mangaApi.getTags().then(setTags);
-  }, []);
+  }, [language]);
 
   return (
     <View style={styles.root}>
@@ -123,7 +138,13 @@ export const Home = ({ navigation }: { navigation: any }) => {
             <Text style={styles.appName}>MangaRabbit</Text>
           </View>
 
-          <View style={styles.menuPlaceholder} />
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => setLangModalVisible(true)}
+            hitSlop={12}
+          >
+            <Ionicons name="globe-outline" size={20} color="#aaa" />
+          </TouchableOpacity>
         </View>
 
         <Searchbar
@@ -221,6 +242,38 @@ export const Home = ({ navigation }: { navigation: any }) => {
           </View>
         )}
       </ScrollView>
+      {/* Modal de idioma */}
+      <Modal
+        visible={langModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLangModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setLangModalVisible(false)}>
+          <Pressable style={styles.modalBox} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Idioma dos capítulos</Text>
+            <FlatList
+              data={LANGUAGES}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.langRow, item.code === language && styles.langRowActive]}
+                  onPress={() => onSelectLanguage(item.code)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.langFlag}>{item.flag}</Text>
+                  <Text style={[styles.langLabel, item.code === language && styles.langLabelActive]}>
+                    {item.label}
+                  </Text>
+                  {item.code === language && (
+                    <Ionicons name="checkmark" size={16} color="#EB5757" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -256,10 +309,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  menuPlaceholder: {
-    width: 36,
-    height: 36,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
+  modalBox: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    paddingVertical: 8,
+    maxHeight: 480,
+  },
+  modalTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#888',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  langRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  langRowActive: {
+    backgroundColor: '#2C2C2E',
+  },
+  langFlag: { fontSize: 20 },
+  langLabel: { flex: 1, fontSize: 15, color: '#ccc' },
+  langLabelActive: { color: '#fff', fontWeight: '700' },
   titleCenter: {
     flexDirection: "row",
     alignItems: "center",

@@ -36,11 +36,11 @@ class MangaApi {
         };
     }
 
-    public async getPopularManga(limit: number = 20): Promise<MangaData[]> {
+    public async getPopularManga(limit: number = 20, language: string = 'pt-br'): Promise<MangaData[]> {
         const response = await axios.get('/manga', {
             params: {
                 limit,
-                availableTranslatedLanguage: ['pt-br'],
+                availableTranslatedLanguage: [language],
                 includes: ['cover_art'],
                 'order[followedCount]': 'desc',
             },
@@ -59,12 +59,13 @@ class MangaApi {
         limit: number = 20,
         title: string = '',
         includedTags: string[] = [],
+        language: string = 'pt-br',
     ): Promise<MangaData[]> {
         const response = await axios.get('/manga', {
             params: {
                 limit,
                 title: title || undefined,
-                availableTranslatedLanguage: ['pt-br'],
+                availableTranslatedLanguage: [language],
                 includedTags: includedTags.length ? includedTags : undefined,
                 includes: ['cover_art'],
                 'order[followedCount]': 'desc',
@@ -87,7 +88,7 @@ class MangaApi {
         return response.data.data.map((m: any) => this.parseManga(m));
     }
 
-    public async getMangaChapters(mangaId: string): Promise<{ id: string; chapter: string; externalUrl?: string | null }[]> {
+    public async getMangaChapters(mangaId: string, language: string = 'pt-br'): Promise<{ id: string; chapter: string; externalUrl?: string | null }[]> {
         try {
             const all: any[] = [];
             let offset = 0;
@@ -97,15 +98,17 @@ class MangaApi {
                 const response = await axios.get('/chapter', {
                     params: {
                         manga: mangaId,
-                        translatedLanguage: ['pt-br'],
+                        'translatedLanguage[]': language,
                         limit,
                         offset,
-                        contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'],
+                        'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'],
                         'order[chapter]': 'asc',
                     },
                 });
-                all.push(...response.data.data);
-                if (all.length >= response.data.total) break;
+                const { data, total } = response.data;
+                console.log(`[getMangaChapters] manga=${mangaId} offset=${offset} page=${data.length} total=${total}`);
+                all.push(...data);
+                if (all.length >= total) break;
                 offset += limit;
             }
 
@@ -126,8 +129,8 @@ class MangaApi {
                     chapter: ch.attributes.chapter ?? 'Oneshot',
                     externalUrl: ch.attributes.externalUrl ?? null,
                 }));
-        } catch (error) {
-            console.error('Erro ao obter capítulos:', error);
+        } catch (error: any) {
+            console.error('[getMangaChapters] Erro:', error?.response?.status, error?.response?.data ?? error?.message);
             return [];
         }
     }
